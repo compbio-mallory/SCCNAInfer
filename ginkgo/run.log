@@ -1,0 +1,3 @@
+bedtools bamToBed -i $dir/$id.bam > $dir/$id.bed
+ls $dir/*.bed > $dir/cell.list
+cli/ginkgo.sh --input $dir/ --genome hg19 --binning variable_175000_48_bwa --maskbadbins --cells $dir/cell.list --alpha $alpha
