@@ -176,7 +176,8 @@ def filter_bins(gc_file, map_file):
             f_out.write("\t")
             f_out.write(gc_line[2])
             f_out.write("\n")
-            f_gc_map.write(gc_line[3] + "\t" + str(mappability) + "\n")
+            f_gc_map.write(gc_line[0] + "\t" + gc_line[1] + "\t" + gc_line[2] + "\t" +
+                           gc_line[3] + "\t" + str(mappability) + "\n")
     f_out.close()
     f_gc_map.close()
 
