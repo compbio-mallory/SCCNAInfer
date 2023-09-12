@@ -567,6 +567,10 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, s
     initP =init_ploidy(cov_matrix, BPs, minP, maxP)
     gc_map_df = pd.read_csv(os.path.join(path, gc), sep = "\t")
     gc_map_df = scale_gc_map(gc_map_df, bin_list)
+    # return secnv's result as intermediate result
+    seCNV_matrix = get_CN(cov_matrix, initP, BPs)
+    df = save_matrix(np.round(seCNV_matrix.T), bin_list, sample, os.path.join(path,  "SeCNV_" + out + "_cnv.tsv"),
+            os.path.join(path,"SeCNV_"+out + "_cnv_meta.tsv"))
     print(initP)
   else:
     print("Use breakpoints from other method")
@@ -578,17 +582,17 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, s
   similarity = getSim(cov_matrix, BPs, initCN, initP)
   matrix = cov_matrix
   bestK, bestPloidy, bestCluster, outliers = getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8)
-  print("best K is ", bestK)
-  print(bestCluster)
+  #print("best number of clusters is ", bestK)
+  #print(bestCluster)
   smallMat = np.delete(matrix, outliers, axis = 1)
   smallInitP = np.delete(initP, outliers, axis=0)
-  print(smallInitP)
+  #print(smallInitP)
   bigCluster = copy.deepcopy(bestCluster)
   if isinstance(BPs[0], list):
     BPs_ = [sublist for i, sublist in enumerate(BPs) if i not in outliers]
   else:
     BPs_ = BPs
-  print("before search P")
+  #print("before search P")
   smallP = searchP(smallMat, BPs_, initCN, bigCluster, np.array(smallInitP).reshape(-1,1))
   smallP = smallP.flatten()
   bigMat = copy.deepcopy(smallMat)
