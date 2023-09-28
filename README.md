@@ -64,11 +64,21 @@ Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 6. `python scripts scPloidy.py -cov aneufinder_reads.tsv -CN aneufinder_cnv.tsv -path $wd -gc gc_map.tsv -out aneufinder -ref hg19`
 <a name="ginkgo"></a>
 ### Run Ginkgo
-<a name="scope"></a>
 1. Download, install and run Ginkgo by following the instruction [here](https://github.com/compbiofan/SingleCellCNABenchmark#ginkgo)
+2. Copy the modified `/path/to/ginkgo/ginkgo.sh` to the `ginkgo/cli` directory. This script commented out plotting commandas.
+3. Copy the modifed `/path/to/ginkgo/process.R` to the `ginkgo/scripts` directory. This script is modified in terms of output format. 
+4. Get bed files. For every bam file, `bedtools bamtobed -i $basename.bam  >  base_name.bed`
+5. Get the cell list. `ls *bed > cell.list` 
+6. Run ginkgo, `bash /path/to/ginkgo/cli/ginkgo.sh --input $wd --genome hg19 --binning $bins --cells cell.list`
+7. Format output. `python /path/to/scCNAPolish/ginkgo/addChrom2reads.py  $wd/data   $wd/SegCopy $output_Ginkgo_reads.tsv` 
+8. Copy scripts/gc_ma_hg19.tsv to $wd.
+9. Run correction `python /path/to/scCNAPolish/scripts/scPloidy.py  -cov $out_Ginkgo_reads.tsv -CN SegCopy -path $wd -gc gc_map_hg19.tsv  -out $output  -ref $ref`
+
+<a name="scope"></a>
 ### Run SCOPE
+MUST have normal cells otherwise the program will exit with an error. 
 1. Download and install SCOPE by following the instruction [here]([https://github.com/ataudt/aneufinder](https://github.com/rujinwang/SCOPE/tree/master))
-2. Run scripts `scope/run_scope.R -b $bamdir -d $wd -r $ref -o $out ` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into, `ref` is the reference type either hg19, or hg38. Add `-p` if bam files are paired-end. This script assumes the bam file has this pattern '\*.dedup.bam$'.
+2. Run scripts `scope/run_scope.R -b $bamdir -d $wd -r $ref -o $out ` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into, `ref` is the reference type either hg19, or hg38. Add `-s` if bam files are single-end. "-p $pattern" is the bam file pattern '\*.dedup.bam$'.
 3. This script will return a cnv file `$out_SCOPE_cnv.tsv` and a raw read depth file `$out_SCOPE_reads.tsv`, and a gc_map.tsv file.
 4. Ready to run the correction
 5.  `python scripts scPloidy.py -cov $out_SCOPE_reads.tsv -CN $out_SCOPE_cnv.tsv-path $wd -gc gc_map.tsv -out $out -ref $ref`
@@ -82,6 +92,14 @@ To run the most recent version of SeCNV, please refer [here](https://github.com/
 <a name="wrapper"></a>
 ## Wrapper Script to run Aneufinder, Ginkgo, SCOPE, SeCNV with Correction
 Here we provide a wrapper script to run one of  Aneufinder, Ginkgo, SCOPE, SeCNV with correction. 
+
+Command to run SeCNV `python scCNAPolish.py -m SeCNV -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 `
+
+Command to run SCOPE `python scCNAPolish.py -m SCOPE -bdir /path/to/dedup_bam/  -wd /path/to/wd -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 -pair`. Remove `-pair` if it is single-end. 
+
+COmmand to run Aneufinder `python scCNAPolish.py -m Aneufinder -bdir /path/to/bam_dedup/  -wd /path/to/wd/ -ref hg19 -fa /path/to/hg19/hg19.fa -out $output  -binw 500000`
+
+Command to run Ginkgo ` python scCNAPolish.py -m Ginkgo -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg19 -out $output  -gbin fixed_500000 -gp /path/to/ginkgo/main/dir/`
 
 <a name="mis"></a>
 ## Mis

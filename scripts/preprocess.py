@@ -162,7 +162,7 @@ def filter_bins(gc_file, map_file):
     bin_num = len(open(map_file, 'r').readlines())
     f_out = open(ref, "w")
     count = 0
-    f_gc_map = open("gc_map.tsv", "w")
+    f_gc_map = open(os.path.join(work_path, "gc_map.tsv"), "w")
     f_gc_map.write("CHROM\tSTART\tEND\tgc\tmap\n")
     for i in range(bin_num):
         gc_line = linecache.getline(gc_file, i+2).strip("\n").split("\t")

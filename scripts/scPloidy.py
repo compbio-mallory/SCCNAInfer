@@ -381,7 +381,7 @@ def getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8):
   print("cluters size 1", bestE)
   for c in range(2, maxK + 1):
     #clustering = AgglomerativeClustering(n_clusters = c, metric="precomputed",linkage="complete" ).fit(dist)
-    clustering = AgglomerativeClustering(n_clusters = c, metric="l1",linkage="complete" ).fit(R)    
+    clustering = AgglomerativeClustering(n_clusters = c, affinity="l1",linkage="complete" ).fit(R)    
     cluster2ploidy = {}
     # get median ploidy of each cluster
     for i in range(c):
@@ -569,8 +569,8 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, s
     gc_map_df = scale_gc_map(gc_map_df, bin_list)
     # return secnv's result as intermediate result
     seCNV_matrix = get_CN(cov_matrix, initP, BPs)
-    df = save_matrix(np.round(seCNV_matrix.T), bin_list, sample, os.path.join(path,  "SeCNV_" + out + "_cnv.tsv"),
-            os.path.join(path,"SeCNV_"+out + "_cnv_meta.tsv"))
+    df = save_matrix(np.round(seCNV_matrix.T), bin_list, sample, os.path.join(path,  "SeCNV_" + outfile + "_cnv.tsv"),
+            os.path.join(path,"SeCNV_"+outfile + "_cnv_meta.tsv"))
     print(initP)
   else:
     print("Use breakpoints from other method")

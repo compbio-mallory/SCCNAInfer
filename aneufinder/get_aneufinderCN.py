@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import sys
 import re
+import gzip
 
 def split_row(row, step):
 	chrom, start, end, cn = row
@@ -13,7 +14,8 @@ def split_row(row, step):
 
 
 cnvFile = sys.argv[1]
-f = open(cnvFile, "r")
+#f = open(cnvFile, "r")
+f = gzip.open(cnvFile, 'rt', encoding='utf-8') 
 lines = f.readlines()
 f.close()
 cell = re.search('for (.+?)\.bam', lines[0]).group().split()[1].split(".")[0]

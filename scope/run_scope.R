@@ -9,8 +9,8 @@ option_list <- list(
   make_option(c("-r", "--ref"), type="character", default="hg19", help="reference type hg38 or hg19", metavar="character"),
 	make_option(c("-d", "--wd"), type="character", default="./", help="working directory", metavar="character"),
 make_option(c("-o", "--out"), type="character", default="", help="output prefix", metavar="character"),
-	make_option(c("-p", "--paired"), action="store_true", default=FALSE, help="Set to paired-end if provided."),
-  make_option(c("-pa", "--pattern"), default = "*.dedup.bam", help = "bam file pattern")
+	make_option(c("-s", "--single"), action="store_true", default=FALSE, help="Set to single-end if provided."),
+  make_option(c("-p", "--pattern"), default = "*.dedup.bam", help = "bam file pattern")
 )
 
 
@@ -19,12 +19,12 @@ opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 bamPath = opt$bamdir
 ref = opt$ref
-paired = opt$paired
+single = opt$single
 wd = opt$wd
 out = opt$out
 
 pa = opt$pattern 
-bamFile <- list.files(bamPath, pattern = paste0(pa, '$')
+bamFile <- list.files(bamPath, pattern = paste0(pa, '$'))
 bamdir <- file.path(bamPath, bamFile)
 sampname_raw <- sapply(strsplit(bamFile, ".", fixed = TRUE), "[", 1)
 
@@ -56,10 +56,10 @@ values(ref_raw) <- cbind(values(ref_raw), DataFrame(gc, mapp))
 if(file.exists("coverageObj.rds")){
 	coverageObj <- readRDS("coverageObj.rds")
 }else{
-	seq = "single-end"
-	if(paired)
+	seq = "paired-end"
+	if(single)
 	{
-		seq = "paired-end"
+		seq = "single-end"
 	}
 coverageObj <- get_coverage_scDNA(bambedObj, mapqthres = 40, 
                                   seq = seq, hgref = ref)
@@ -117,15 +117,15 @@ df <- as.data.frame(ref)
 gc_map <- df[, c("seqnames", "start", "end", "gc", "mapp")]
 gc_map$gc <- df$gc / 100
 colnames(gc_map) <- c("CHROM", "START", "END", "gc", "map")
-write.table(gc_map, paste(wd, "/gc_map.tsv"), sep = "\t", row.names = F, quote = F)
+write.table(gc_map, paste0(wd, "/gc_map.tsv"), sep = "\t", row.names = F, quote = F)
 
 # select columns for chromosome, start and end
 df <- df[, c("seqnames", "start", "end")]
 colnames(df) <- c("CHROM", "START", "END")
 CN <- cbind(df, iCN_sim)
-write.table(CN, paste(wd, "/", out, "_SCOPE_cnv.tsv", sep = "\t", row.names = FALSE, quote = F)
+write.table(CN, paste0(wd, "/", out, "_SCOPE_cnv.tsv"), sep = "\t", row.names = FALSE, quote = F)
 
 reads <- cbind(df, Y)
 names(reads) <- names(CN)
-write.table(reads, paste(wd, "/", out, "_SCOPE_read.tsv"), sep = "\t", row.names = F, quote = F)
+write.table(reads, paste0(wd, "/", out, "_SCOPE_read.tsv"), sep = "\t", row.names = F, quote = F)
 
