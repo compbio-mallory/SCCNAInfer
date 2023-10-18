@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 from secnv_segmentation import *
+from extract_BP import *
 #import secnv_segmentation
 from sklearn.neighbors import KernelDensity
 from sklearn import metrics
@@ -16,17 +17,14 @@ import numpy as np
 import argparse
 from collections import Counter
 
-# find the common breakpoints in non-cross sample segmentaiton
-# select the breakpoint as common breakpoints if
-# 1. more than 3 cells have it, or
-# 2. 
-# avg_reads take care of non-cross sample
-# get_CN use avg_reads, so non-cross sample is taken care as well
-builtin = True
+# version2: take segmentation as input
+# assume input segmentation file is chrom, start, end
 
 src_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(src_path)
 
+# read in read count matrix
+# @file_name, read file name
 def read_matrix(file_name):
   f = open(file_name)
   matrix = []
@@ -41,12 +39,10 @@ def read_matrix(file_name):
     if not count == 1:
       matrix.append(line[3:])
       chr_name.append(line[0])
-      #bin_list.append(line[0]+":"+line[1]+"-"+line[2])
       bin_list.append([line[0], int(float(line[1])), int(float(line[2]))])
     else:
       sample_list = line
   matrix = np.array(matrix)
-  #bin_list = np.array(bin_list)
   bin_list_df = pd.DataFrame(bin_list, columns = ['CHROM', 'START', 'END'])
   sample_list = np.array(sample_list[3:])
   matrix = matrix.astype(float)
@@ -56,20 +52,22 @@ def read_matrix(file_name):
   chr_name = np.array(chr_name)
   f.close()
   cov_df = pd.read_csv(file_name, sep = "\t")
-  print(cov_df.head())
+  # drop last empty column if any
   cov_df = cov_df.dropna(axis=1, how='all')
   cov_df.dropna(inplace=True)
   sample_list = cov_df.columns.to_list()[3:]
   return matrix, cov_df, chr_name, bin_list_df, sample_list
 
+# write out matrix
+# @matrix: copy number matrix
+# @bin_list_df: df with bin list, chrom, start, end
+# @sample_list: list of sample name
+# @cnv_name: output cnv file name
+# @meta_name: output meta data file name
 def save_matrix(matrix, bin_list_df, sample_list, cnv_name, meta_name):
   ploidy = np.average(matrix, axis=1)
   ploidy = np.round(ploidy, 2)
-  #df = pd.DataFrame(matrix.T, columns=sample_list, index=bin_list)
   df = pd.DataFrame(matrix.T, columns=sample_list)
-  #ind = df.index.to_series().str.split(r':|-', expand = True)
-  #ind = ind.rename(columns={0: "CHROM", 1: "START", 2:"END"})
-  #df = pd.concat([ind, df], axis=1, join='inner')
   df = pd.concat([bin_list_df, df], axis=1, join='inner')
   df.to_csv(cnv_name, index=False, sep = "\t")
   df_2 = pd.DataFrame(np.vstack((sample_list, ploidy)).T, columns=["cell_id", "c_ploidy"])
@@ -78,23 +76,15 @@ def save_matrix(matrix, bin_list_df, sample_list, cnv_name, meta_name):
 
 
 # this function average the read counts to the median for each segment
-# take care of 2d list of bps
+# @Y: read count matrix
+# @BPs: break point list
 def avg_reads(Y, BPs):
   Y_cp = copy.deepcopy(Y)
-  if not isinstance(BPs[0], list):
-    for j in range(len(BPs)):
-      if j == 0:
-        Y_cp[0:BPs[j]+1, ] = np.median(Y_cp[0:BPs[j]+1, ], axis = 0)
-      else:
-        Y_cp[BPs[j-1]+1:BPs[j]+1, ] = np.median(Y_cp[BPs[j-1]+1:BPs[j]+1, ], axis = 0)
-  else:
-    for c in range(Y_cp.shape[1]):
-      bps = BPs[c]
-      for j in range(len(bps)):
-        if j == 0:
-          Y_cp[0:bps[j]+1, c] = np.median(Y_cp[0:bps[j]+1, c])
-        else:
-          Y_cp[bps[j-1]+1:bps[j]+1, c] = np.median(Y_cp[bps[j-1]+1:bps[j]+1, c])
+  for j in range(len(BPs)):
+    if j == 0:
+      Y_cp[0:BPs[j]+1, ] = np.median(Y_cp[0:BPs[j]+1, ], axis = 0)
+    else:
+      Y_cp[BPs[j-1]+1:BPs[j]+1, ] = np.median(Y_cp[BPs[j-1]+1:BPs[j]+1, ], axis = 0)
   return Y_cp
   
 # get non interger copy number
@@ -109,34 +99,25 @@ def get_CN(Y, ploidy, BPs):
   res[res > 10] = 10
   return res
 
-# get pairwise ploidy difference
-def ploidy_dist(ploidy):
-  n = len(ploidy)
-  dist = np.empty([n,n])
-  for i in range(n):
-    for j in range(n):
-      dist[i,j] = abs(ploidy[i] - ploidy[j])
-  return dist
 
-
-def get_entropy(CN_nonInt,  ploidy, cluster, BPs):
-  print("get entropy")
+# get the cost for clustering
+# @CN_nonInt: non interger copy number matrix
+# @cluster: cluster list
+# @return: return the cost
+def get_entropy(CN_nonInt,   cluster):
   k = max(cluster) + 1
   CN = np.around(CN_nonInt).T
   absCNsum = np.sum(np.abs(np.around(CN_nonInt) - CN_nonInt)) 
   #print(cluster)
   intraCluster = 0
   pseudo = []
-  M_P = []
   interCluster = 0
 
   for c in range(max(cluster) + 1):
     cells = np.where(cluster == c)
     # get median cp number
     M_CN = np.median(CN[cells], axis = 0)
-    M_P.append(ploidy[cells[0][0]])
     pseudo.append(M_CN)
-
     for cell in cells:
       intraCluster += np.sum(np.abs(M_CN - CN[cell]))
   # get inter cluster distance
@@ -150,7 +131,6 @@ def get_entropy(CN_nonInt,  ploidy, cluster, BPs):
     interCluster[c][c] = np.Inf
     #print(interCluster[c])
     c1 = interCluster[c].argmin()
-
     distSum += np.sum(np.abs(pseudo[c1] - pseudo[c]))
   distSum = distSum
   E = absCNsum*(1+0.05*(k))  - distSum +  intraCluster*(1+0.05*k)
@@ -158,6 +138,12 @@ def get_entropy(CN_nonInt,  ploidy, cluster, BPs):
     E = 10**-20
   return np.log( E)
 
+# initialize the ploidy
+# @Y: read counts
+# @BPs: break points list
+# @minP: minimum ploidy
+# @maxP: maximum ploidy
+# @return: a list of ploidy 
 def init_ploidy(Y, BPs, minP, maxP):
   reads = avg_reads(Y, BPs)
   Y_cp = reads.T # row = cells, col = bins
@@ -170,15 +156,14 @@ def init_ploidy(Y, BPs, minP, maxP):
       scnp = RCNP * i
       sose_list.append(np.sum(np.square(np.round(scnp) - scnp)))
     ploidy = X[sose_list.index(min(sose_list))]
-    #print(sample_list[j], "mean", np.mean(cell), "median", np.median(cell),"std", np.std(cell), ploidy)
     initP.append(ploidy)
   return np.array(initP)
 
-# get breakpoints from all chromosome
+# get breakpoints from all chromosomes, merged into one list
 # @bins_len, a list contains the number of bins in each chromosome
 # @breakpoints, a list of breakpoints index for each chromosome
-# return a list of breakpoint index with respect to all bins across all chromosome
-def getBPs(bins_len, breakpoints):
+# @return a list of breakpoint index with respect to all bins across all chromosome
+def mergeBPs(bins_len, breakpoints):
   bps = breakpoints[0]
   # merge breakpoints into a single list and change index
   total_len = bins_len[0]
@@ -188,33 +173,29 @@ def getBPs(bins_len, breakpoints):
     total_len += bins_len[i]
   return bps
 
-# matrix: seg * cell
-def getSim(matrix, BPs, CN, ploidy_list):
-  dist, R = getDist(matrix, BPs, CN, ploidy_list)
+# get the similarity matrix between cells
+# @matrix: read count matrix
+# @ploidy: list ploidy list
+# @return: return similarity
+def getSim(matrix, BPs, ploidy_list):
+  dist, R = getDist(matrix, BPs, ploidy_list)
   return 1 - dist
 
 # get the distance between each pair of cells
+# define the reads ratio as abs(R_x - R_y) / mean(R)
 # @matrix, read count matrix. bins*cells
-# @breakpoints, breakpoints index. Returned from getBPs
+# @breakpoints, breakpoints index
 # @sample_list: list of sample name
 # @ploidy_list: list of ploidy for all cells
-# define the reads ratio as abs(R_x - R_y) / mean(R)
-def getDist(matrix, BPs, CN_, ploidy_list):
+# @return: return the distant matrix, and read count ratio list 
+def getDist(matrix, BPs, ploidy_list):
   initP = ploidy_list
-  if CN_ is None:
-    new_reads = avg_reads(matrix, BPs)
-    CN = get_CN(matrix, initP, BPs)
-    CN = np.around(CN)
-    BPs_ = BPs
-  else:
-    # BPs is a 2d list of bp
-    new_reads = avg_reads(matrix, BPs)
-    CN = CN_
-    BPs_ = [item for sublist in BPs for item in sublist]
-    BPs_ = sorted(list(set(BPs_)))
-   # get read count ratio
+  new_reads = avg_reads(matrix, BPs)
+  CN = get_CN(matrix, initP, BPs)
+  CN = np.around(CN)
+  BPs_ = BPs
+  # get read count ratio
   R_list = []
-
   for i in range(matrix.shape[1]):
     r = []
     for j in (BPs_):
@@ -227,18 +208,17 @@ def getDist(matrix, BPs, CN_, ploidy_list):
     R_list.append(r)
   R_list = np.array(R_list)
   dist = metrics.pairwise.manhattan_distances(R_list)
-  # print(R_list[7])
-  # print(R_list[12])
-  # for d in dist:
-  #   print(d)
   dist_ = (dist - np.amin(dist))/(np.amax(dist) - np.amin(dist) + 10**(-16))
   return dist_, R_list
 
 # this function update the reads counts by gc and map for each cluster
 # @reads: read count matrix, bins*cell
-# @ploidy_list: list of ploidy for each cell
-# @df: dataframe of gc and mappability 3/29		
-def update_reads(reads, cluster, df, ploidy, BPs):
+# @clusters: cluster list
+# @ploidy: list of ploidy for each cell
+# @gc_map_df: dataframe of gc and mappability 
+# @BPs: breakpoint list	
+# @return update reads
+def update_reads(reads, cluster, gc_map_df, ploidy, BPs):
 	CN = get_CN(reads, ploidy, BPs)
 	CN = np.round(CN.T) # now is cell by bins
 	reads = reads.T # now is cell by bins
@@ -253,9 +233,9 @@ def update_reads(reads, cluster, df, ploidy, BPs):
 		# find bins with same gc and map
 		if b in used_bins:
 			continue
-		curr_gc = df.iloc[b,3]
-		curr_map = df.iloc[b,4]
-		same_gc_map = df[(df['gc'] == curr_gc) & (df['map'] == curr_map)]
+		curr_gc = gc_map_df.iloc[b,3]
+		curr_map = gc_map_df.iloc[b,4]
+		same_gc_map = gc_map_df[(gc_map_df['gc'] == curr_gc) & (gc_map_df['map'] == curr_map)]
 		ind = (same_gc_map.index.to_list())
 		used_bins = used_bins+ind
 		if len(ind) >1:
@@ -279,19 +259,18 @@ def update_reads(reads, cluster, df, ploidy, BPs):
 
 
 # search ploidy that minimize the cost function
-# reads: updated reads
-# BPs: breakpoints
-# clusters: list of lables
-# ploidy: initial ploidy
-def searchP( reads, BPs, initCN, clusters, ploidy):
+# @reads: updated reads
+# @BPs: breakpoints
+# @clusters: list of lables
+# @ploidy: initial ploidy
+# @return: return  a list of optimal copy number
+def searchP( reads, BPs,  clusters, ploidy):
   print("in search p")
   print(clusters)
   resP = copy.deepcopy(ploidy)
-  sim = getSim(reads, BPs, initCN,  ploidy.reshape((1,-1)))
+  sim = getSim(reads, BPs,  ploidy.reshape((1,-1)))
   for c in range(max(clusters) + 1):
     cells = np.where(np.array(clusters) == c)
-    #minP = np.min(resP[cells[0]])
-    #maxP = np.max(resP[cells[0]])
     minP = np.percentile(resP[cells[0]], 25)
     maxP = np.percentile(resP[cells[0]], 75)
     if maxP - minP <= 0.05:
@@ -307,9 +286,8 @@ def searchP( reads, BPs, initCN, clusters, ploidy):
     bestP = 0
     for p in X:
       CN_nonInt = get_CN(reads_.T, [p], BPs).T # cells * bins
-      # work good on both  and CRC2
       E = np.sum(np.abs(np.round(CN_nonInt) - CN_nonInt)*weight.reshape((-1,1))) + np.sum(pairwise_distances(np.round(CN_nonInt))*weight.reshape((-1,1)))/2
-      print("current p", p,"E", E)
+      #print("current p", p,"E", E)
       if E < bestE:
         bestE = E
         bestP = p
@@ -318,12 +296,11 @@ def searchP( reads, BPs, initCN, clusters, ploidy):
       #resP[cell] = np.median(resP[cells[0]])
       resP[cell] = bestP
   return resP
+
+# scale gc and mapp to integer from 0 - 100
+# @gc_map_df: gc and mapp df
+# @bin_list_df: a df of bin list
 def scale_gc_map(gc_map_df, bin_list_df):
-  #df = pd.DataFrame(bin_list)
-  #df = df[0].str.split(r':|-', expand = True)
-  #df = df.rename(columns={0: "CHROM", 1: "START", 2:"END"})
-  #df['START'] = df['START'].astype(int)
-  #df['END'] = df['END'].astype(int)
   df = bin_list_df
   gc = gc_map_df
   df = df.merge(gc)
@@ -339,19 +316,20 @@ def scale_gc_map(gc_map_df, bin_list_df):
 
 
 # find the best clusters
-# return the clustering with min cost
 # if a cluster has < 2 cells, this clustering will not be considered
-# BPs, breakpoints
-# cov_matrix, coverage matrix
-# sample, sample name list
-# 4/15 maximize inter-clusters distance
-def getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8):
+# @BPs, breakpoints
+# @cov_matrix, coverage matrix
+# @sample, sample name list
+# @initP: initial ploidy
+# @maxK: maximum number of cluster being considered
+# @return the clustering with min cost
+def getClusters(BPs,  cov_matrix, initP, samples, perc = 50, maxK = 8):
   # remove outliner from clustering
   outliers = []
-
-  dist, R = getDist(cov_matrix, BPs, initCN, initP)
-  q2 = np.percentile(np.array(dist), 50)
+  dist, R = getDist(cov_matrix, BPs,  initP)
+  q2 = np.percentile(np.array(dist), perc)
   print("q2", q2)
+  sim = 1 - dist
   for i in range(len(initP)):
     dist_ = dist[i]
     dist_ = np.delete(dist_,[i])
@@ -363,12 +341,11 @@ def getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8):
   ploidy_list = np.delete(ploidy_list, outliers, axis = 0)
 
   R = np.delete(R, outliers, axis = 0)
-  print(outliers)
-  if isinstance(BPs[0], list):
-    BPs_ = [sublist for i, sublist in enumerate(BPs) if i not in outliers]
-
-  else:
-    BPs_ = BPs
+  dist_ = pd.DataFrame(dist)
+  dist_.drop(outliers, inplace = True, axis = 1)
+  dist_ = dist_.values
+  dist_ = np.delete(dist_, outliers, axis = 0)
+  BPs_ = BPs
   cells_count = matrix_.shape[1]
   bestE = sys.maxsize 
   bestK = 1
@@ -376,18 +353,20 @@ def getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8):
   medPloidy = np.median(ploidy_list)
   bestPloidy = [medPloidy] * cells_count
   CN_nonInt = get_CN(matrix_, bestPloidy, BPs_)
-  bestE = get_entropy(CN_nonInt, bestPloidy, np.array([0]*len(bestPloidy)), BPs)		
+  bestE = get_entropy(CN_nonInt, np.array([0]*len(bestPloidy)))		
   bestCluster = [0] * cells_count
   print("cluters size 1", bestE)
   for c in range(2, maxK + 1):
-    #clustering = AgglomerativeClustering(n_clusters = c, metric="precomputed",linkage="complete" ).fit(dist)
-    clustering = AgglomerativeClustering(n_clusters = c, affinity="l1",linkage="complete" ).fit(R)    
+    clustering = AgglomerativeClustering(n_clusters = c, metric="l1",linkage="complete" ).fit(R)    
+    #clustering = AgglomerativeClustering(n_clusters = c, metric="precomputed",linkage="complete" ).fit(1- dist_)  
     cluster2ploidy = {}
     # get median ploidy of each cluster
     for i in range(c):
       cells = np.where(clustering.labels_ == i)
       medPloidy = np.median(ploidy_list[cells[0]])
       print(ploidy_list[cells[0]])
+      #print(cells[0])
+      #print(np.array(samples)[cells[0]])
       print("cluster", i, "median ploidy", medPloidy)
       cluster2ploidy[i] = medPloidy
     print(clustering.n_clusters_, clustering.labels_)
@@ -396,7 +375,7 @@ def getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8):
       cluster = clustering.labels_[i]
       newPloidy_list.append(round(cluster2ploidy[cluster],3))
     CN_nonInt = get_CN(matrix_, newPloidy_list, BPs_)
-    E = get_entropy(CN_nonInt, newPloidy_list, clustering.labels_, BPs)
+    E = get_entropy(CN_nonInt, clustering.labels_)
     print("clusters size", c, "E", E)
     freq = Counter(clustering.labels_)
     flag = False
@@ -412,9 +391,16 @@ def getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8):
   return bestK, bestPloidy, bestCluster, outliers
 
 # use SeCNV's segmentation method
-def segmentation(path, cov, gc, norm_file, ref, K, s):
+# @path: working path
+# @cov: coverage matrix
+# @gcF: gc and mapp file
+# @norm_file: file with nomral cells
+# @ref: reference type, hg19, hg38 
+# @K: top K to consider when segmenting
+# @return: BPs, cov_matrix, cov_df, bin_list_df, sample_list
+def segmentation(path, cov, gcF, norm_file, ref, K, s):
   Y, cov_df, chr_name, bin_list_df, sample_list = read_matrix(os.path.join(path, cov))
-  gc_map_df = pd.read_csv(os.path.join(path,gc), sep = "\t")
+  gc_map_df = pd.read_csv(os.path.join(path,gcF), sep = "\t")
   bin_list_df, gc_map_df, Y, cov_df = filterBins(cov_df, gc_map_df)
   print(cov_df.head())
   chr_name = np.array(cov_df['CHROM'].values.tolist())
@@ -446,7 +432,7 @@ def segmentation(path, cov, gc, norm_file, ref, K, s):
     boundaries = dp_process.find_boundaries()
     breakpoints.append(boundaries)
     bins_len.append(adj_matrix.shape[0])
-  BPs = getBPs(bins_len, breakpoints)
+  BPs = mergeBPs(bins_len, breakpoints)
   print(len(BPs), BPs)
   cov_df = pd.DataFrame(cov_matrix, columns = cov_df.columns.tolist()[3:])
   cov_df = pd.concat([bin_list_df, cov_df], axis = 1)
@@ -461,6 +447,7 @@ def filterBins(cov_df, gc_df):
   print(df_filtered.shape)
   print(cov_df.shape)
   df_filtered = df_filtered.merge(cov_df)
+  df_filtered = df_filtered.reset_index(drop=True)
   bin_list_df = df_filtered[['CHROM', 'START', 'END']]
   gc = df_filtered[['CHROM', 'START', 'END', "gc", "map"]]
   cov_ = df_filtered.drop(['CHROM', 'START', 'END', "gc", "map"], axis = 1).to_numpy()
@@ -476,10 +463,6 @@ def Bias_norm_others(cov_df, gc_map_df, ref):
     ave_bias = pd.read_csv(os.path.join(src_path, "hg19_bias.txt"), sep = "\t")
   else:
     ave_bias = pd.read_csv(os.path.join(src_path, "hg38_bias.txt"), sep = "\t")
-  # for i in range(ave_bias.shape[0]):
-  #   chrom, start, end = ave_bias.loc[i, ["CHROM", "START", "END"]]
-  #   if len(cov_df[(cov_df['CHROM'] == chrom) & (cov_df['START'] == start) & (cov_df['END'] == end)]) == 0:
-  #     print( chrom, start, end)
   merged_df = ave_bias.merge(cov_df)
   print(merged_df.shape)
   
@@ -498,15 +481,44 @@ def Bias_norm_others(cov_df, gc_map_df, ref):
   return gc_nor_Y.T, gc_map_df_, gc_map_df_[["CHROM", "START", "END"]]  
   
 # find breakpoints given copy number profile from other method
+# @df: cnv df
+# @gc_map_df: df for gc and mapp 
+# return breakpoints 
+def findBPs(df, gc_map_df):
+  df = df.merge(gc_map_df, how="inner").drop(['gc', 'map'],axis=1)
+  df = df.reset_index(drop=True)
+  BPlist = []
+  CN = df.iloc[:, 3:]
+  # Loop through the columns and find the row indices where values change
+  for column in CN.columns:
+    change_indices = df[column].ne(df[column].shift()).iloc[1:].index[df[column].ne(df[column].shift()).iloc[1:]].tolist()
+    BPlist.extend(change_indices)
+  count_dict = Counter(BPlist)
+  count_dict = dict(sorted(count_dict.items()))
+  BPs = []
+  for key, value in count_dict.items():
+    if value >= 3:
+      if key - 1 in BPs and value + 3< count_dict[key - 1]:
+        continue
+      BPs.append(key)
+  BPs = sorted(BPs)
+  return BPs
+
+# get BPs from CNV matrix or directly from BP files, filter bins, normalize reads
+# @path: working path
+# @cov: coverage matrix
+# @gcF: gc and mapp file
+# @norm_file: file with nomral cells
+# @ref: reference type, hg19, hg38 
 # return breakpoints and cov matrix
-def findBPs(path, covF, CNF, gc, ref):
+def getBPs(path, covF, CNF, gc, ref):
   df = pd.read_csv(os.path.join(path, CNF), sep = "\t")
   cov, cov_df, chr_name, bin_list_df, sample_list = read_matrix(os.path.join(path, covF))
   gc_map_df = pd.read_csv(os.path.join(path,gc), sep = "\t")
   gc_map_df = gc_map_df.merge(bin_list_df)
-  print(cov_df.head())
+  # filter bins
   bin_list_df, gc_map_df, cov, cov_df = filterBins(cov_df, gc_map_df)
-  print("shape after filtering", cov.shape)
+  # normalize reads
   var, norm_cell_index, abnorm_cell_index = get_norm_cell(cov, sample_list, "None" )
   if len(norm_cell_index) > 0:
     cov = Bias_norm(cov, norm_cell_index, ref)
@@ -515,85 +527,83 @@ def findBPs(path, covF, CNF, gc, ref):
   gc_map_df = scale_gc_map(gc_map_df, bin_list_df)
   print("shape after normalization", cov.shape)
   BPlist = []
-  df = df.merge(gc_map_df, how="inner").drop(['gc', 'map'],axis=1)
-  df = df.reset_index(drop=True)
-  print(df.head())
-  CN = df.iloc[:, 3:]
-  # Loop through the columns and find the row indices where values change
-  initP = []
-  # get breakpoint for each sample
-  BPlists = []
-  for column in CN.columns:
-    change_indices = df[column].ne(df[column].shift()).iloc[1:].index[df[column].ne(df[column].shift()).iloc[1:]].tolist()
-    # if selected_columns.shape[0] - 1 not in change_indices:
-    #    change_indices.append(selected_columns.shape[0] - 1)
-    # if len(BPlists) > 0 and crossSample and change_indices not in BPlists:
-    #   crossSample = False
-    BPlist.extend(change_indices)
-    BPlists.append(change_indices)
-  count_dict = Counter(BPlist)
-  count_dict = dict(sorted(count_dict.items()))
-  BPs = []
-  for key, value in count_dict.items():
-    if value >= 3:
-      if key - 1 in BPs:
+  # only contains chrom, start, end
+  # input is a breakpoint matrix
+  if df.shape[1] == 3: 
+    # sort and deduplicates the bp df
+    df = df.sort_values(by=['CHROM', 'START', 'END'])
+    df.drop_duplicates(inplace=True)
+    df = df.reset_index(drop=True)
+    # add the end of the chromosome to the BPlist
+    for i in range(1, 23):
+      temp = bin_list_df[(bin_list_df['CHROM'] == 'chr' + str(i))]
+      BPlist.append(temp.index.tolist()[-1])
+    for idx, row in df.iterrows():
+      temp = bin_list_df[(bin_list_df['CHROM'] == row["CHROM"])& (bin_list_df['END'] == row["END"])]
+      if len(temp.index.tolist()) == 0:
         continue
-      BPs.append(key)
-  print(len(BPs),BPs)  
-#   # get common breakpoints for cross sample data
-#   print(crossSample)
-# # Compare each row with the previous row
-#   all_bps = selected_columns.ne(selected_columns.shift()).any(axis=1)
-# # Get the row indices where the current row is different from the previous row
-#   allBPlist = all_bps[all_bps].index.tolist()
-#   allBPlist = allBPlist[1:-1]
-  print(CN.shape)
-  initP = CN.mean().tolist()
-#   allBPlist = sorted(allBPlist)
-  return BPlists, cov, CN.to_numpy(), bin_list_df, gc_map_df, sample_list, initP
+      i = temp.index.tolist()[0]
+      BPlist.append(i)
+      BPlist = set(BPlist)
+      BPlist = sorted(BPlist)
+  else:
+    BPlist = findBPs(df, gc_map_df)
+  return BPlist, cov, gc_map_df, bin_list_df, sample_list
 
-
-def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, secnv = True):
+# this function find the cloest cluster
+def findCloestCluster(clusters, ploidy, outliers, similarity):
+  for o in outliers:
+    sim = similarity[o]
+    max_sim = 0
+    p = 0
+    g = -1
+    for c in range(max(clusters) + 1):
+      cells = np.where(clusters == c)[0]
+      avg_sim = np.mean(sim[cells])
+      print("outlier", o, "cluster", c, "sim", avg_sim, ploidy[cells[0]])
+      if avg_sim > max_sim:
+        max_sim = avg_sim
+        p = ploidy[cells[0]]
+        g = c
+    ploidy[o] = p
+    clusters[o] = g
+  return ploidy, clusters
+  
+   
+def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, perc):
   BPs = None
   cov_matrix = None
   initP = None
   bin_list = None
   sample = None
-  BPlists = None
-  initCN = None
   gc_map_df = None
   if CNfile == "None":
     BPs, cov_matrix, cov_df, bin_list, sample = segmentation(path, covfile, gc, norm_file, ref, K, s)
-    initP =init_ploidy(cov_matrix, BPs, minP, maxP)
     gc_map_df = pd.read_csv(os.path.join(path, gc), sep = "\t")
     gc_map_df = scale_gc_map(gc_map_df, bin_list)
     # return secnv's result as intermediate result
+    initP =init_ploidy(cov_matrix, BPs, minP, maxP) 
     seCNV_matrix = get_CN(cov_matrix, initP, BPs)
     df = save_matrix(np.round(seCNV_matrix.T), bin_list, sample, os.path.join(path,  "SeCNV_" + outfile + "_cnv.tsv"),
-            os.path.join(path,"SeCNV_"+outfile + "_cnv_meta.tsv"))
-    print(initP)
+            os.path.join(path,"SeCNV_"+outfile + "_cnv_meta.tsv"))  
   else:
     print("Use breakpoints from other method")
-    global builtin
-    builtin = False
-    BPs, cov_matrix, initCN, bin_list, gc_map_df, sample, initP = findBPs(path, covfile, CNfile, gc, ref)
-    print(initP)
-    initP = init_ploidy(cov_matrix, BPs, minP, maxP)
-  similarity = getSim(cov_matrix, BPs, initCN, initP)
+    BPs, cov_matrix, gc_map_df, bin_list, sample = getBPs(path, covfile, CNfile, gc, ref)
+
+  initP =init_ploidy(cov_matrix, BPs, minP, maxP) 
+  similarity = getSim(cov_matrix, BPs, initP)
   matrix = cov_matrix
-  bestK, bestPloidy, bestCluster, outliers = getClusters(BPs, initCN, cov_matrix, initP,  maxK = 8)
-  #print("best number of clusters is ", bestK)
-  #print(bestCluster)
+  bestK, bestPloidy, bestCluster, outliers = getClusters(BPs, cov_matrix, initP,  sample, perc, maxK = 8)
+  print("best K is ", bestK)
+  print(bestCluster)
   smallMat = np.delete(matrix, outliers, axis = 1)
   smallInitP = np.delete(initP, outliers, axis=0)
-  #print(smallInitP)
+  print(smallInitP)
   bigCluster = copy.deepcopy(bestCluster)
-  if isinstance(BPs[0], list):
-    BPs_ = [sublist for i, sublist in enumerate(BPs) if i not in outliers]
-  else:
-    BPs_ = BPs
-  #print("before search P")
-  smallP = searchP(smallMat, BPs_, initCN, bigCluster, np.array(smallInitP).reshape(-1,1))
+
+  BPs_ = BPs
+  print("before search P")
+  smallP = searchP(smallMat, BPs_,  bigCluster, np.array(smallInitP).reshape(-1,1))
   smallP = smallP.flatten()
   bigMat = copy.deepcopy(smallMat)
   bigP = copy.deepcopy(smallP)
@@ -601,14 +611,17 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, s
     bigMat = np.insert(bigMat, c, matrix[:,c], axis = 1)
     bigP= np.insert(bigP, c, -1)
     bigCluster = np.insert(bigCluster, c, -1)
+  bigP, bigCluster = findCloestCluster(bigCluster, bigP, outliers, similarity)
   for c in outliers:
-    indexed_list = list(enumerate(similarity[c]))
-    sorted_list = sorted(indexed_list, key=lambda x: x[1], reverse=True)
-    for d in sorted_list:
-      if d[0] != c and bigCluster[d[0]] != -1:
-        bigCluster[c] = bigCluster[d[0]]
-        bigP[c] = bigP[d[0]]
-        break
+    print(bigP[c], bigCluster[c])
+  # for c in outliers:
+  #   indexed_list = list(enumerate(similarity[c]))
+  #   sorted_list = sorted(indexed_list, key=lambda x: x[1], reverse=True)
+  #   for d in sorted_list:
+  #     if d[0] != c and bigCluster[d[0]] != -1:
+  #       bigCluster[c] = bigCluster[d[0]]
+  #       bigP[c] = bigP[d[0]]
+  #       break
 
   bigMat = update_reads(bigMat, bigCluster, gc_map_df, bigP, BPs)
   seCNV_matrix = get_CN(bigMat, bigP.reshape((1,-1)), BPs)
@@ -618,7 +631,7 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, s
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("-cov", help="Coverage matrix", type=str)
-  parser.add_argument("-CN", help="Copy number profile if not use built-in segmentaiton method", default="None")
+  parser.add_argument("-CN", help="Copy number profile or segmetation file if not use built-in segmentaiton method", default="None")
   parser.add_argument("-path", help="work path", type=str)
   parser.add_argument("-minP", help="Miminum ploidy", type=float, default=1.5)
   parser.add_argument("-maxP", help="Maximum ploidy", type=float, default=5)
@@ -628,5 +641,6 @@ if __name__ == "__main__":
   parser.add_argument("-out", help="Output file name")
   parser.add_argument("-norm", help="Normal cell file", default="None")
   parser.add_argument("-ref", help= "reference version hg38 or hg19", default ="hg19")
+  parser.add_argument("-perc", help= "percentile to use to remove outlier", type = int, default =50)
   args = parser.parse_args()
-  main(args.cov, args.CN, args.path, args.minP, args.maxP, args.K, args.s, args.gc, args.out, args.norm, args.ref)
+  main(args.cov, args.CN, args.path, args.minP, args.maxP, args.K, args.s, args.gc, args.out, args.norm, args.ref, args.perc)
