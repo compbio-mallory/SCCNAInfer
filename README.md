@@ -1,13 +1,12 @@
-# scPloidy
+# scCNAInfer
 This repo provides ploidy correction given the raw read counts and copy number profiles from existing tools.
-
+![alt text](https://github.com/compbio-mallory/SCCNAInfer/blob/main/SCCNAInfer.png)
 ## Contents
 1. [Setup](#setup)
 2. [Preprocess](#pre)
 3. [Running scPloidy Correction](#runscploidy)
 	- [Input](#input)
 	- [Output](#output)
-
 4. [Running Aneufinder, Ginkgo, SCOPE, SeCNV](#runothers)
    - [Aneufinder](#aneufinder)
    - [Ginkgo](#ginkgo)
@@ -43,7 +42,7 @@ When only raw read count is provided, scPloidy will perform segmentation adapted
 - `-path`[Required] Working path
 - `-gc` [Required] GC and mappability file. Should be in this format 'CHROM START END gc mapp'. A precomuted gc and mapp files can be found in the script folder.
 - `-out`[Required] Output file prefix.
-- `-CN` [Optional] A tab separated abosolute copy number profile file. If provided, scploidy will extract the segmentation information from this file instead of performing segmentation. Should be in this format 'CHROM START END Cell1 Cell2 ...'
+- `-CN` [Optional] A tab separated segmentation file or abosolute copy number profile file. If provided, scploidy will extract the segmentation information from this file instead of performing segmentation. If segemntation file is provide, it should contains exact three columns 'CHROM START END'. If the copy number profile is provided, the file be in this format 'CHROM START END Cell1 Cell2 ...'
 - `-ref` [Optional] reference type. Either hg19 or hg38. Default is hg19. 
 - All input files should be in the same folder $path. 
 
@@ -77,7 +76,7 @@ Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 <a name="scope"></a>
 ### Run SCOPE
 MUST have normal cells otherwise the program will exit with an error. 
-1. Download and install SCOPE by following the instruction [here]([https://github.com/ataudt/aneufinder](https://github.com/rujinwang/SCOPE/tree/master))
+1. Download and install SCOPE by following the instruction [here](https://github.com/rujinwang/SCOPE/tree/master)
 2. Run scripts `scope/run_scope.R -b $bamdir -d $wd -r $ref -o $out ` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into, `ref` is the reference type either hg19, or hg38. Add `-s` if bam files are single-end. "-p $pattern" is the bam file pattern '\*.dedup.bam$'.
 3. This script will return a cnv file `$out_SCOPE_cnv.tsv` and a raw read depth file `$out_SCOPE_reads.tsv`, and a gc_map.tsv file.
 4. Ready to run the correction
