@@ -4,7 +4,7 @@ This repo provides ploidy correction given the raw read counts and copy number p
 ## Contents
 1. [Setup](#setup)
 2. [Preprocess](#pre)
-3. [Running scPloidy Correction](#runscploidy)
+3. [Running SCCNAInfer Correction](#runSCCNAInfer)
 	- [Input](#input)
 	- [Output](#output)
 4. [Running Aneufinder, Ginkgo, SCOPE, SeCNV](#runothers)
@@ -28,27 +28,27 @@ bwa, samtools, bedtools, bigWigAverageOverBed, pyfaidx, picard
 <a name="pre"></a>
 ## Preprocessing
 The preprocess the bam files, users can following the preprocessing steps described [here](https://github.com/deepomicslab/SeCNV).
-<a name="runscploidy"></a>
-## Running scPloidy
+<a name="runSCCNAInfer"></a>
+## Running SCCNAInfer
 
 <a name="input"></a>
 ### Input
-scPloidy takes outputs from an existing method and perform correction on CNV based on the clonality. Commands to run Aneufinder, Ginkgo, SCOPE, and SeCNV are provided [below](#runothers) 
+SCCNAInfer takes outputs from an existing method and perform correction on CNV based on the clonality. Commands to run Aneufinder, Ginkgo, SCOPE, and SeCNV are provided [below](#runothers) 
 
-When only raw read count is provided, scPloidy will perform segmentation adapted from SeCNV, then perform the correction accordingly. 
+When only raw read count is provided, SCCNAInfer will perform segmentation adapted from SeCNV, then perform the correction accordingly. 
 
-`python scripts scPloidy.py -cov $reads -CN $CN -path $path -gc $gc -out $out -ref $ref`
+`python scripts SCCNAInfer.py -cov $reads -CN $CN -path $path -gc $gc -out $out -ref $ref`
 - `-cov` [Required] A tab separated read depth files. Should be in this format 'CHROM START END Cell1 Cell2 ...'
 - `-path`[Required] Working path
 - `-gc` [Required] GC and mappability file. Should be in this format 'CHROM START END gc mapp'. A precomuted gc and mapp files can be found in the script folder.
 - `-out`[Required] Output file prefix.
-- `-CN` [Optional] A tab separated segmentation file or abosolute copy number profile file. If provided, scploidy will extract the segmentation information from this file instead of performing segmentation. If segemntation file is provide, it should contains exact three columns 'CHROM START END'. If the copy number profile is provided, the file be in this format 'CHROM START END Cell1 Cell2 ...'
+- `-CN` [Optional] A tab separated segmentation file or abosolute copy number profile file. If provided, SCCNAInfer will extract the segmentation information from this file instead of performing segmentation. If segemntation file is provide, it should contains exact three columns 'CHROM START END'. If the copy number profile is provided, the file be in this format 'CHROM START END Cell1 Cell2 ...'
 - `-ref` [Optional] reference type. Either hg19 or hg38. Default is hg19. 
 - All input files should be in the same folder $path. 
 
 <a name="output"></a>
 ### Output
-scPloidy will return a tsv file `$out_cnv.tsv` with corrected copy number in this format 'CHROM START END Cell1 Cell2 ...'.
+SCCNAInfer will return a tsv file `$out_cnv.tsv` with corrected copy number in this format 'CHROM START END Cell1 Cell2 ...'.
 
 <a name="runothers"></a>
 ## Running Aneufinder, Ginkgo, SCOPE, SeCNV
@@ -60,7 +60,7 @@ scPloidy will return a tsv file `$out_cnv.tsv` with corrected copy number in thi
 4. Extract the raw read counts into a formated tsv file. `
 Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 5. Ready to run the correction.
-6. `python scripts scPloidy.py -cov aneufinder_reads.tsv -CN aneufinder_cnv.tsv -path $wd -gc gc_map.tsv -out aneufinder -ref hg19`
+6. `python scripts SCCNAInfer.py -cov aneufinder_reads.tsv -CN aneufinder_cnv.tsv -path $wd -gc gc_map.tsv -out aneufinder -ref hg19`
 <a name="ginkgo"></a>
 ### Run Ginkgo
 1. Download, install and run Ginkgo by following the instruction [here](https://github.com/compbiofan/SingleCellCNABenchmark#ginkgo)
@@ -71,7 +71,7 @@ Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 6. Run ginkgo, `bash /path/to/ginkgo/cli/ginkgo.sh --input $wd --genome hg19 --binning $bins --cells cell.list`
 7. Format output. `python /path/to/scCNAPolish/ginkgo/addChrom2reads.py  $wd/data   $wd/SegCopy $output_Ginkgo_reads.tsv` 
 8. Copy scripts/gc_ma_hg19.tsv to $wd.
-9. Run correction `python /path/to/scCNAPolish/scripts/scPloidy.py  -cov $out_Ginkgo_reads.tsv -CN SegCopy -path $wd -gc gc_map_hg19.tsv  -out $output  -ref $ref`
+9. Run correction `python /path/to/scCNAPolish/scripts/SCCNAInfer.py  -cov $out_Ginkgo_reads.tsv -CN SegCopy -path $wd -gc gc_map_hg19.tsv  -out $output  -ref $ref`
 
 <a name="scope"></a>
 ### Run SCOPE
@@ -80,11 +80,11 @@ MUST have normal cells otherwise the program will exit with an error.
 2. Run scripts `scope/run_scope.R -b $bamdir -d $wd -r $ref -o $out ` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into, `ref` is the reference type either hg19, or hg38. Add `-s` if bam files are single-end. "-p $pattern" is the bam file pattern '\*.dedup.bam$'.
 3. This script will return a cnv file `$out_SCOPE_cnv.tsv` and a raw read depth file `$out_SCOPE_reads.tsv`, and a gc_map.tsv file.
 4. Ready to run the correction
-5.  `python scripts scPloidy.py -cov $out_SCOPE_reads.tsv -CN $out_SCOPE_cnv.tsv-path $wd -gc gc_map.tsv -out $out -ref $ref`
+5.  `python scripts SCCNAInfer.py -cov $out_SCOPE_reads.tsv -CN $out_SCOPE_cnv.tsv-path $wd -gc gc_map.tsv -out $out -ref $ref`
 <a name="secnv"></a>
 ### Run SeCNV
 1. Get read depth file. `python scripts/preprocess.py $wd $refFile $bamdir $pattern $bin $ref`. `$wd` working directory. `$refFile` is the absolute path the the reference, eg /path/to/ref.fa.`$bamdir` is the directory holding preprocessed bam files.`$pattern` is the pattern of the preprocessed bam files, eg \*dedup.bam. `$bin` is the bin width, eg 500000. `$ref` is either hg19 or hg38. 
-2. Users can use the main script to run SeCNV `python scripts/scPloidy.py -cov $reads  -path $path -gc $gc -out $out -ref $ref`. SeCNV's result will be returned as intermediate results. 
+2. Users can use the main script to run SeCNV `python scripts/SCCNAInfer.py -cov $reads  -path $path -gc $gc -out $out -ref $ref`. SeCNV's result will be returned as intermediate results. 
 
 To run the most recent version of SeCNV, please refer [here](https://github.com/deepomicslab/SeCNV), and cover the output CNV file into the required format 'CHROM START END Cell1 Cell2 ...' before running the correction. 
 
