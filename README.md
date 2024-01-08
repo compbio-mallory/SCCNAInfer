@@ -7,7 +7,7 @@ This repo provides ploidy correction given the raw read counts and copy number p
 3. [Running SCCNAInfer Correction](#runSCCNAInfer)
 	- [Input](#input)
 	- [Output](#output)
-  - [Example](#example)
+  	- [Example](#example)
 4. [Running SCCNAInfer with Aneufinder, Ginkgo, SCOPE, SeCNV Input](#runothers)
    - [Aneufinder](#aneufinder)
    - [Ginkgo](#ginkgo)
@@ -61,10 +61,10 @@ This will produce `test_cnv.tsv` and `test_cnv_out.tsv` outputs.
 <a name="aneufinder"></a>
 ### Run SCCNAInfer with Aneufinder Input
 1. Download and install Aneufinder by following the instruction [here](https://github.com/ataudt/aneufinder)
-2. Run scripts `aneufinder/run_aneufinder.R -b $bamdir -d $wd` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into.
-3. Extract the copy number profile into a formatted tsv file. `python run_aneufinder/get_aneufinderCN.py $wd/BROWSERFILES/method-edivisive/binsize_5e+05_stepsize_5e+05_CNV.bed.gz aneufinder_cnv.tsv 500000`
+2. Run scripts `aneufinder/run_aneufinder.R -b $bamdir -d $wd` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into. 
+3. Extract the copy number profile into a formatted tsv file. `python aneufinder/get_aneufinderCN.py $wd/BROWSERFILES/method-edivisive/binsize_5e+05_stepsize_5e+05_CNV.bed.gz aneufinder_cnv.tsv 500000`
 4. Extract the raw read counts into a formated tsv file. `
-Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
+Rscript aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 5. Ready to run the correction.
 6. `python SCCNAInfer/scripts/SCCNAInfer_main.py -cov aneufinder_reads.tsv -CN aneufinder_cnv.tsv -path $wd -gc gc_map.tsv -out aneufinder -ref hg19`
 <a name="ginkgo"></a>
@@ -75,7 +75,7 @@ Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 4. Get bed files. For every bam file, `bedtools bamtobed -i $basename.bam  >  base_name.bed`
 5. Get the cell list. `ls *bed > cell.list` 
 6. Run ginkgo, `bash /path/to/ginkgo/cli/ginkgo.sh --input $wd --genome hg19 --binning $bins --cells cell.list`
-7. Format output. `python /path/to/scCNAPolish/ginkgo/addChrom2reads.py  $wd/data   $wd/SegCopy $output_Ginkgo_reads.tsv` 
+7. Format output. `python SCCNAInfer/ginkgo/addChrom2reads.py  $wd/data   $wd/SegCopy $output_Ginkgo_reads.tsv` 
 8. Copy scripts/gc_ma_hg19.tsv to $wd.
 9. Run correction `python SCCNAInfer/scripts/SCCNAInfer_main.py  -cov $out_Ginkgo_reads.tsv -CN SegCopy -path $wd -gc gc_map_hg19.tsv  -out $output  -ref $ref`
 
@@ -98,18 +98,18 @@ To run the most recent version of SeCNV, please refer [here](https://github.com/
 ## Wrapper Script to run Aneufinder, Ginkgo, SCOPE, SeCNV with Correction
 Here we provide a wrapper script to run one of  Aneufinder, Ginkgo, SCOPE, SeCNV with correction. 
 
-Command to run SCCNAInfer with SeCNV Input `python scCNAPolish.py -m SeCNV -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 `
+Command to run SCCNAInfer with SeCNV Input `python SCCNAInfer.py -m SeCNV -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 `
 
-Command to run SCCNAInfer with SCOPE Input `python scCNAPolish.py -m SCOPE -bdir /path/to/dedup_bam/  -wd /path/to/wd -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 -pair`. Remove `-pair` if it is single-end. 
+Command to run SCCNAInfer with SCOPE Input `python SCCNAInfer.py -m SCOPE -bdir /path/to/dedup_bam/  -wd /path/to/wd -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 -pair`. Remove `-pair` if it is single-end. 
 
-COmmand to run SCCNAInfer with Aneufinder Input `python scCNAPolish.py -m Aneufinder -bdir /path/to/bam_dedup/  -wd /path/to/wd/ -ref hg19 -fa /path/to/hg19/hg19.fa -out $output  -binw 500000`
+COmmand to run SCCNAInfer with Aneufinder Input `python SCCNAInfer.py -m Aneufinder -bdir /path/to/bam_dedup/  -wd /path/to/wd/ -ref hg19 -fa /path/to/hg19/hg19.fa -out $output  -binw 500000`
 
-Command to run SCCNAInfer with Ginkgo Input ` python scCNAPolish.py -m Ginkgo -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg19 -out $output  -gbin fixed_500000 -gp /path/to/ginkgo/main/dir/`
+Command to run SCCNAInfer with Ginkgo Input ` python SCCNAInfer.py -m Ginkgo -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg19 -out $output  -gbin fixed_500000 -gp /path/to/ginkgo/main/dir/`
 
 <a name="mis"></a>
 ## Mis
 ### Calculate GC and mappability
 GC and mappability are required in order to udpate reads.</br>
 Use the following command to calculate GC and mappability from the segmentation from other CNV calling methods. </br>
-`python cal_gc_map.py $path $ref $ref_type $bins` </br>
+`python SCCNAInfer/scripts/cal_gc_map.py $path $ref $ref_type $bins` </br>
 where `$path` is the work path. `$ref` is the path to the reference file. `$ref_type` is the reference type: hg19 or hg38. `$bins` is a tab-sep file contains (variable/fixed) consecutive bins: the first three columns should be CHROM, START, END. This will output a file `gc_map.tsv` in the `$path`. 
