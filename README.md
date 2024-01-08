@@ -7,7 +7,7 @@ This repo provides ploidy correction given the raw read counts and copy number p
 3. [Running SCCNAInfer Correction](#runSCCNAInfer)
 	- [Input](#input)
 	- [Output](#output)
-4. [Running Aneufinder, Ginkgo, SCOPE, SeCNV](#runothers)
+4. [Running SCCNAInfer with Aneufinder, Ginkgo, SCOPE, SeCNV Input](#runothers)
    - [Aneufinder](#aneufinder)
    - [Ginkgo](#ginkgo)
    - [SCOPE](#scope)
@@ -51,9 +51,9 @@ When only raw read count is provided, SCCNAInfer will perform segmentation adapt
 SCCNAInfer will return a tsv file `$out_cnv.tsv` with corrected copy number in this format 'CHROM START END Cell1 Cell2 ...'.
 
 <a name="runothers"></a>
-## Running Aneufinder, Ginkgo, SCOPE, SeCNV
+## Running SCCNAInfer with Aneufinder, Ginkgo, SCOPE, SeCNV Input
 <a name="aneufinder"></a>
-### Run Aneufinder
+### Run SCCNAInfer with Aneufinder Input
 1. Download and install Aneufinder by following the instruction [here](https://github.com/ataudt/aneufinder)
 2. Run scripts `aneufinder/run_aneufinder.R -b $bamdir -d $wd` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into.
 3. Extract the copy number profile into a formatted tsv file. `python run_aneufinder/get_aneufinderCN.py $wd/BROWSERFILES/method-edivisive/binsize_5e+05_stepsize_5e+05_CNV.bed.gz aneufinder_cnv.tsv 500000`
@@ -62,7 +62,7 @@ Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 5. Ready to run the correction.
 6. `python scripts SCCNAInfer.py -cov aneufinder_reads.tsv -CN aneufinder_cnv.tsv -path $wd -gc gc_map.tsv -out aneufinder -ref hg19`
 <a name="ginkgo"></a>
-### Run Ginkgo
+### Run SCCNAInfer with Ginkgo Input
 1. Download, install and run Ginkgo by following the instruction [here](https://github.com/compbiofan/SingleCellCNABenchmark#ginkgo)
 2. Copy the modified `/path/to/ginkgo/ginkgo.sh` to the `ginkgo/cli` directory. This script commented out plotting commandas.
 3. Copy the modifed `/path/to/ginkgo/process.R` to the `ginkgo/scripts` directory. This script is modified in terms of output format. 
@@ -74,7 +74,7 @@ Rscript run_aneufinder/getRawReads.R binned aneufinder_reads.tsv`
 9. Run correction `python /path/to/scCNAPolish/scripts/SCCNAInfer.py  -cov $out_Ginkgo_reads.tsv -CN SegCopy -path $wd -gc gc_map_hg19.tsv  -out $output  -ref $ref`
 
 <a name="scope"></a>
-### Run SCOPE
+### Run SCCNAInfer with SCOPE Input
 MUST have normal cells otherwise the program will exit with an error. 
 1. Download and install SCOPE by following the instruction [here](https://github.com/rujinwang/SCOPE/tree/master)
 2. Run scripts `scope/run_scope.R -b $bamdir -d $wd -r $ref -o $out ` where `$bamdir` is the directory with the bamfiles, and `$wd` is the working directory, where the output will be written into, `ref` is the reference type either hg19, or hg38. Add `-s` if bam files are single-end. "-p $pattern" is the bam file pattern '\*.dedup.bam$'.
@@ -82,7 +82,7 @@ MUST have normal cells otherwise the program will exit with an error.
 4. Ready to run the correction
 5.  `python scripts SCCNAInfer.py -cov $out_SCOPE_reads.tsv -CN $out_SCOPE_cnv.tsv-path $wd -gc gc_map.tsv -out $out -ref $ref`
 <a name="secnv"></a>
-### Run SeCNV
+### Run SCCNAInfer with SeCNV Input
 1. Get read depth file. `python scripts/preprocess.py $wd $refFile $bamdir $pattern $bin $ref`. `$wd` working directory. `$refFile` is the absolute path the the reference, eg /path/to/ref.fa.`$bamdir` is the directory holding preprocessed bam files.`$pattern` is the pattern of the preprocessed bam files, eg \*dedup.bam. `$bin` is the bin width, eg 500000. `$ref` is either hg19 or hg38. 
 2. Users can use the main script to run SeCNV `python scripts/SCCNAInfer.py -cov $reads  -path $path -gc $gc -out $out -ref $ref`. SeCNV's result will be returned as intermediate results. 
 
@@ -92,13 +92,13 @@ To run the most recent version of SeCNV, please refer [here](https://github.com/
 ## Wrapper Script to run Aneufinder, Ginkgo, SCOPE, SeCNV with Correction
 Here we provide a wrapper script to run one of  Aneufinder, Ginkgo, SCOPE, SeCNV with correction. 
 
-Command to run SeCNV `python scCNAPolish.py -m SeCNV -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 `
+Command to run SCCNAInfer with SeCNV Input `python scCNAPolish.py -m SeCNV -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 `
 
-Command to run SCOPE `python scCNAPolish.py -m SCOPE -bdir /path/to/dedup_bam/  -wd /path/to/wd -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 -pair`. Remove `-pair` if it is single-end. 
+Command to run SCCNAInfer with SCOPE Input `python scCNAPolish.py -m SCOPE -bdir /path/to/dedup_bam/  -wd /path/to/wd -ref hg38 -fa /path/to/hg38/hg38.fa -out $output -gc gc_map.tsv -binw 500000 -pair`. Remove `-pair` if it is single-end. 
 
-COmmand to run Aneufinder `python scCNAPolish.py -m Aneufinder -bdir /path/to/bam_dedup/  -wd /path/to/wd/ -ref hg19 -fa /path/to/hg19/hg19.fa -out $output  -binw 500000`
+COmmand to run SCCNAInfer with Aneufinder Input `python scCNAPolish.py -m Aneufinder -bdir /path/to/bam_dedup/  -wd /path/to/wd/ -ref hg19 -fa /path/to/hg19/hg19.fa -out $output  -binw 500000`
 
-Command to run Ginkgo ` python scCNAPolish.py -m Ginkgo -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg19 -out $output  -gbin fixed_500000 -gp /path/to/ginkgo/main/dir/`
+Command to run SCCNAInfer with Ginkgo Input ` python scCNAPolish.py -m Ginkgo -bdir /path/to/dedup_bam/  -wd /path/to/wd/ -ref hg19 -out $output  -gbin fixed_500000 -gp /path/to/ginkgo/main/dir/`
 
 <a name="mis"></a>
 ## Mis
