@@ -154,44 +154,6 @@ class DP_process:
     self.boundaries.reverse()
     return self.boundaries
 
-def Bias_norm(Y, norm_cell_index, ref):
-  Y = Y.T
-  # clip the extreme reads
-  # Calculate the mean and standard deviation of each row
-  #cell_means = np.mean(Y, axis=1)
-  #cell_stdevs = np.std(Y, axis=1)
-  # Calculate the threshold value for each row
-  #thresholds = cell_means + 2 * cell_stdevs
-  # Replace values greater than the threshold with the threshold value
-  for i in range(Y.shape[0]):
-    #Y[i][Y[i] > thresholds[i]] = thresholds[i]
-    Y[i][Y[i] < 10] = 10
-    # use the normal cells to normalize the data
-  if len(norm_cell_index) > 0:
-    norm_cell_Y = Y[norm_cell_index]
-    bias_matrix = []
-    for cell in norm_cell_Y:
-      bias_list = []
-      median = np.median(cell)
-      for bin in cell:
-        bias = bin/median
-        bias_list.append(bias)
-      bias_list = np.array(bias_list)
-      bias_matrix.append(bias_list)
-    bias_matrix = np.array(bias_matrix)
-    ave_bias = bias_matrix.mean(axis=0)
-    ave_bias = np.where(ave_bias==0, 1, ave_bias)
-    temp = pd.DataFrame(ave_bias, columns = ["bias"])
-    temp.to_csv("inferred_bias.tsv", sep = "\t", index = False, header = False)  
-  else:
-    if ref == "hg19":
-      ave_bias = pd.read_csv(os.path.join(src_path, "hg19_bias.txt"), sep = "\t")
-      ave_bias = ave_bias['Bias'].values
-    else:
-      ave_bias = pd.read_csv(os.path.join(src_path, "hg38_bias.txt"), sep = "\t")
-      ave_bias = ave_bias['Bias'].values
-  gc_nor_Y = Y / ave_bias
-  return gc_nor_Y.T
 
 def Bias_norm_secnv(Y, norm_cell_index, ref):
   Y = Y.T

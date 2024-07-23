@@ -54,7 +54,7 @@ SCCNAInfer will return a tsv file `$out_cnv.tsv` with corrected copy number in t
 <a name="example"></a>
 ### Example
 `python SCCNAInfer/scripts/SCCNAInfer.py -cov genome_cov.bed  -path /SCCNAInfer/example -gc gc_map.tsv -cn secnv_cnv.tsv -out test -ref hg38`
-This will produce `test_cnv.tsv` and `test_cnv_out.tsv` outputs. 
+This will produce `test_cnv.tsv` and `test_cnv_metatsv` and `test_clusters.tsv` outputs. 
 
 <a name="runothers"></a>
 ## Running SCCNAInfer with Aneufinder, Ginkgo, SCOPE, SeCNV Input

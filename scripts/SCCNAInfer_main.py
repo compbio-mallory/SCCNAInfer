@@ -4,7 +4,6 @@ import sys
 import numpy as np
 import pandas as pd
 from secnv_segmentation import *
-from extract_BP import *
 #import secnv_segmentation
 from sklearn.neighbors import KernelDensity
 from sklearn import metrics
@@ -219,43 +218,30 @@ def getDist(matrix, BPs, ploidy_list):
 # @BPs: breakpoint list	
 # @return update reads
 def update_reads(reads, cluster, gc_map_df, ploidy, BPs):
-	CN = get_CN(reads, ploidy, BPs)
-	CN = np.round(CN.T) # now is cell by bins
-	reads = reads.T # now is cell by bins
-	used_bins = []
-	print("Updating reads", reads.shape)
-	M_CN = {}
-	# get median copy number for each
-	for c in range(max(cluster) + 1):
-		cells = np.where(cluster == c)[0]
-		M_CN[c] = np.round(np.median(CN[cells],axis = 0))
-	for b in range(reads.shape[1]):
-		# find bins with same gc and map
-		if b in used_bins:
-			continue
-		curr_gc = gc_map_df.iloc[b,3]
-		curr_map = gc_map_df.iloc[b,4]
-		same_gc_map = gc_map_df[(gc_map_df['gc'] == curr_gc) & (gc_map_df['map'] == curr_map)]
-		ind = (same_gc_map.index.to_list())
-		used_bins = used_bins+ind
-		if len(ind) >1:
-			for c in range(max(cluster) + 1):
-			# for each cluster
-			# get cell index in this cluster
-				cells = np.where(cluster == c)[0]
-				# get median CN for this gc map groups
-				CNs = set(M_CN[c][ind])
-				for cn in CNs:
-					ind_ = np.where(M_CN[c] == cn)[0]
-					ind1 = []
-					for x in ind_:
-						if x in ind:
-							ind1.append(x)
-					if len(ind1) > 1:
-						for cell in cells:
-							med_read = np.median(reads[cell][ind1], axis = None)
-							reads[cell][ind1] =  med_read
-	return reads.T
+  CN = np.round(get_CN(reads, ploidy, BPs).T)  # cell by bins
+  reads = reads.T  # cell by bins
+  print("Updating reads", reads.shape)
+
+  # Calculate median copy number for each cluster
+  M_CN = {c: np.round(np.median(CN[cluster == c], axis=0)) for c in range(max(cluster) + 1)}
+
+  # Create a dictionary for GC and map combinations to bins
+  gc_map_groups = gc_map_df.groupby(['gc', 'map']).apply(lambda x: x.index.tolist()).to_dict()
+
+  for bins in gc_map_groups.values():
+    if len(bins) > 1:
+      for c in range(max(cluster) + 1):
+        cells = np.where(cluster == c)[0]
+        CNs = set(M_CN[c][bins])
+
+        for cn in CNs:
+          common_bins = [b for b in bins if M_CN[c][b] == cn]
+          if len(common_bins) > 1:
+            for cell in cells:
+              med_read = np.median(reads[cell][common_bins], axis=None)
+              reads[cell][common_bins] = med_read
+
+  return reads.T
 
 
 # search ploidy that minimize the cost function
@@ -402,17 +388,18 @@ def segmentation(path, cov, gcF, norm_file, ref, K, s):
   Y, cov_df, chr_name, bin_list_df, sample_list = read_matrix(os.path.join(path, cov))
   gc_map_df = pd.read_csv(os.path.join(path,gcF), sep = "\t")
   bin_list_df, gc_map_df, Y, cov_df = filterBins(cov_df, gc_map_df)
-  print(cov_df.head())
   chr_name = np.array(cov_df['CHROM'].values.tolist())
-  print("Y shape after filtering bin", Y.shape)
   var, norm_cell_index, abnorm_cell_index = get_norm_cell(Y, sample_list, norm_file )
-  cov_matrix = Bias_norm(Y, norm_cell_index, ref)
+  if len(norm_cell_index) > 0:
+    cov_matrix = Bias_norm(Y, norm_cell_index, ref)
+  else:
+    cov_matrix, gc_map_df, bin_list_df  = Bias_norm_others(cov_df, gc_map_df, ref)
   temp = pd.DataFrame(cov_matrix, columns = sample_list)
   temp['CHROM'] = bin_list_df['CHROM']
   temp['START'] = bin_list_df['START']
   temp['END'] = bin_list_df['END']
   
-  temp.to_csv("normalized_reads.tsv", sep = "\t", index = False)
+  #temp.to_csv("normalized_reads.tsv", sep = "\t", index = False)
   chosen_chr = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22"]
   breakpoints = []
   bins_len = []
@@ -444,8 +431,6 @@ def segmentation(path, cov, gcF, norm_file, ref, K, s):
 def filterBins(cov_df, gc_df):
   print("Filtering bins based on gc and mappability")
   df_filtered = gc_df[(gc_df['gc'] > 0.2) & (gc_df['gc'] < 0.8) & (gc_df['map'] > 0.9)]
-  print(df_filtered.shape)
-  print(cov_df.shape)
   df_filtered = df_filtered.merge(cov_df)
   df_filtered = df_filtered.reset_index(drop=True)
   bin_list_df = df_filtered[['CHROM', 'START', 'END']]
@@ -453,6 +438,37 @@ def filterBins(cov_df, gc_df):
   cov_ = df_filtered.drop(['CHROM', 'START', 'END', "gc", "map"], axis = 1).to_numpy()
   cov_df = df_filtered.drop(["gc", "map"], axis = 1)
   return bin_list_df, gc, cov_, cov_df
+
+# when normal cells are detected
+def Bias_norm(Y, norm_cell_index, ref):
+  Y = Y.T
+  # clip the extreme reads
+  # Calculate the mean and standard deviation of each row
+  #cell_means = np.mean(Y, axis=1)
+  #cell_stdevs = np.std(Y, axis=1)
+  # Calculate the threshold value for each row
+  #thresholds = cell_means + 2 * cell_stdevs
+  # Replace values greater than the threshold with the threshold value
+  for i in range(Y.shape[0]):
+    #Y[i][Y[i] > thresholds[i]] = thresholds[i]
+    Y[i][Y[i] < 10] = 10
+    # use the normal cells to normalize the data
+  if len(norm_cell_index) > 0:
+    norm_cell_Y = Y[norm_cell_index]
+    bias_matrix = []
+    for cell in norm_cell_Y:
+      bias_list = []
+      median = np.median(cell)
+      for b in cell:
+        bias = b/median
+        bias_list.append(bias)
+      bias_list = np.array(bias_list)
+      bias_matrix.append(bias_list)
+    bias_matrix = np.array(bias_matrix)
+    ave_bias = bias_matrix.mean(axis=0)
+    ave_bias = np.where(ave_bias==0, 1, ave_bias) 
+  gc_nor_Y = Y / ave_bias
+  return gc_nor_Y.T
 
 # normalize read counts for other methods
 # when no normal cell detected
@@ -594,15 +610,11 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, p
   similarity = getSim(cov_matrix, BPs, initP)
   matrix = cov_matrix
   bestK, bestPloidy, bestCluster, outliers = getClusters(BPs, cov_matrix, initP,  sample, perc, maxK = 8)
-  print("best K is ", bestK)
-  print(bestCluster)
   smallMat = np.delete(matrix, outliers, axis = 1)
   smallInitP = np.delete(initP, outliers, axis=0)
-  print(smallInitP)
   bigCluster = copy.deepcopy(bestCluster)
 
   BPs_ = BPs
-  print("before search P")
   smallP = searchP(smallMat, BPs_,  bigCluster, np.array(smallInitP).reshape(-1,1))
   smallP = smallP.flatten()
   bigMat = copy.deepcopy(smallMat)
@@ -612,17 +624,13 @@ def main(covfile, CNfile, path, minP, maxP, K, s, gc, outfile, norm_file, ref, p
     bigP= np.insert(bigP, c, -1)
     bigCluster = np.insert(bigCluster, c, -1)
   bigP, bigCluster = findCloestCluster(bigCluster, bigP, outliers, similarity)
+  print("Outliers are assigned to ")
   for c in outliers:
     print(bigP[c], bigCluster[c])
-  # for c in outliers:
-  #   indexed_list = list(enumerate(similarity[c]))
-  #   sorted_list = sorted(indexed_list, key=lambda x: x[1], reverse=True)
-  #   for d in sorted_list:
-  #     if d[0] != c and bigCluster[d[0]] != -1:
-  #       bigCluster[c] = bigCluster[d[0]]
-  #       bigP[c] = bigP[d[0]]
-  #       break
 
+  # save cluster information
+  df = pd.DataFrame({'Cell': sample, 'Cluster': bigCluster}) 
+  df.to_csv(os.path.join(path, outfile + "_clusters.tsv"), index=False, sep = "\t") 
   bigMat = update_reads(bigMat, bigCluster, gc_map_df, bigP, BPs)
   seCNV_matrix = get_CN(bigMat, bigP.reshape((1,-1)), BPs)
   df = save_matrix(np.round(seCNV_matrix.T), bin_list, sample, os.path.join(path, outfile+ "_cnv.tsv"),
