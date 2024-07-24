@@ -227,7 +227,7 @@ class Compute_KR():
                     else:
                         norm_sum += (2 * self.matrix[i, j]) / (norm_list[i] * norm_list[j])
                         matrix_sum += 2 * self.matrix[i, j]
-        return np.sqrt(norm_sum / matrix_sum)
+        return np.sqrt(norm_sum / (matrix_sum + 10e-10))
 
 
 def KR_norm(matrix_in):

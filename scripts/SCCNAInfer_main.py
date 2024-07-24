@@ -351,8 +351,6 @@ def getClusters(BPs,  cov_matrix, initP, samples, perc = 50, maxK = 8):
       cells = np.where(clustering.labels_ == i)
       medPloidy = np.median(ploidy_list[cells[0]])
       print(ploidy_list[cells[0]])
-      #print(cells[0])
-      #print(np.array(samples)[cells[0]])
       print("cluster", i, "median ploidy", medPloidy)
       cluster2ploidy[i] = medPloidy
     print(clustering.n_clusters_, clustering.labels_)
@@ -374,7 +372,7 @@ def getClusters(BPs,  cov_matrix, initP, samples, perc = 50, maxK = 8):
       bestPloidy = newPloidy_list
       bestCluster = clustering.labels_
       bestK = c
-  return bestK, bestPloidy, bestCluster, outliers
+  return bestK, bestPloidy, np.array(bestCluster), outliers
 
 # use SeCNV's segmentation method
 # @path: working path
